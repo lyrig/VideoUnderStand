@@ -1,13 +1,12 @@
 from __future__ import annotations
 import torch
 import torch.nn as nn
-from typing import Tuple
 
 
 class QueryBuilder(nn.Module):
 
     def __init__(self, hidden_size: int, query_len: int, num_layers: int = 2, num_heads: int = 8,
-                 dropout: float = 0.0, ff_mult: int = 4, max_len: int = 2048):
+                 dropout: float = 0.0, ff_mult: int = 4, max_len: int = 30720):
         super().__init__()
         self.hidden_size = hidden_size
         self.query_len = query_len
@@ -26,13 +25,23 @@ class QueryBuilder(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.ln = nn.LayerNorm(hidden_size)
 
+    def _ensure_pos_emb_len(self, target_len: int, device: torch.device, dtype: torch.dtype) -> None:
+        cur_len = self.pos_emb.size(1)
+        if target_len <= cur_len:
+            return
+
+        new_len = max(target_len, cur_len * 2)
+        new_pos = torch.randn(1, new_len, self.hidden_size, device=device, dtype=dtype) * 0.02
+        with torch.no_grad():
+            new_pos[:, :cur_len, :] = self.pos_emb.detach().to(device=device, dtype=dtype)
+        self.pos_emb = nn.Parameter(new_pos)
+
     def forward(self, H: torch.Tensor, H_key_padding_mask: torch.BoolTensor | None = None) -> torch.Tensor:
 
         B, L, D = H.shape
         q = self.q_init.unsqueeze(0).expand(B, -1, -1)  # (B,K,D)
         x = torch.cat([H, q], dim=1)  # (B, L+K, D)
-        if x.size(1) > self.pos_emb.size(1):
-            raise ValueError(f"Sequence too long for pos_emb: {x.size(1)} > {self.pos_emb.size(1)}. Increase max_len.")
+        self._ensure_pos_emb_len(x.size(1), device=H.device, dtype=H.dtype)
         x = x + self.pos_emb[:, : x.size(1), :]
 
 
