@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 import torch
 import torch.nn.functional as F
 
+
 def stage1_loss(base_model, vismem_model, inputs: Dict[str, Any], target_text: str):
 
     tokenizer = vismem_model.tokenizer
@@ -28,8 +29,11 @@ def stage1_loss(base_model, vismem_model, inputs: Dict[str, Any], target_text: s
 
     # Feed
     emb = base_model.get_input_embeddings()(inputs["input_ids"])
-    inp_embeds = torch.cat([emb, M, base_model.get_input_embeddings()(tgt_ids)], dim=1)
-    attn2 = torch.ones(inp_embeds.size()[:-1], device=device, dtype=torch.long)
+    tgt_emb = base_model.get_input_embeddings()(tgt_ids.to(inputs["input_ids"].device))
+    M = M.to(device=emb.device, dtype=emb.dtype)
+    tgt_emb = tgt_emb.to(device=emb.device, dtype=emb.dtype)
+    inp_embeds = torch.cat([emb, M, tgt_emb], dim=1)
+    attn2 = torch.ones(inp_embeds.size()[:-1], device=inp_embeds.device, dtype=torch.long)
 
     labels2 = torch.cat([inputs["input_ids"], torch.full((inputs["input_ids"].size(0), M.size(1)), -100, device=device, dtype=torch.long), tgt_ids], dim=1)
     labels2[:, :inputs["input_ids"].size(1) + M.size(1)] = -100
