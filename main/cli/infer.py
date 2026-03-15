@@ -1,7 +1,6 @@
 from __future__ import annotations
 import argparse
 from PIL import Image
-import torch
 
 from main.utils.logging import get_logger
 from main.utils.misc import to_torch_dtype
@@ -16,6 +15,7 @@ def main():
     ap.add_argument("--config", default="configs/vismem_qwen25vl7b.yaml")
     ap.add_argument("--model_name_or_path", default=None)
     ap.add_argument("--image", default=None)
+    ap.add_argument("--video", default=None)
     ap.add_argument("--prompt", required=True)
     ap.add_argument("--max_new_tokens", type=int, default=256)
     ap.add_argument("--enable_vismem", action="store_true")
@@ -38,8 +38,15 @@ def main():
     vismem.eval()
 
     img = Image.open(args.image).convert("RGB") if args.image else None
-    out = vismem.generate(images=[img] if img else [None], prompts=[args.prompt], max_new_tokens=args.max_new_tokens,
-                          temperature=args.temperature, top_p=args.top_p, enable_vismem=args.enable_vismem)
+    out = vismem.generate(
+        images=[img] if img else None,
+        videos=[args.video] if args.video else None,
+        prompts=[args.prompt],
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        enable_vismem=args.enable_vismem,
+    )
     print(out[0])
 
 if __name__ == "__main__":

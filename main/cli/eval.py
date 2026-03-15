@@ -48,11 +48,18 @@ def main():
     for i in tqdm(range(len(ds))):
         batch = collate_samples([ds[i]])
         img = batch["images"][0]
+        video = batch["videos"][0]
         prompt = batch["prompts"][0]
         answer = batch["answers"][0]
         if answer is None:
             continue
-        pred = vismem.generate(images=[img], prompts=[prompt], max_new_tokens=args.max_new_tokens, enable_vismem=args.enable_vismem)[0]
+        pred = vismem.generate(
+            images=[img] if video is None else None,
+            videos=[video] if video is not None else None,
+            prompts=[prompt],
+            max_new_tokens=args.max_new_tokens,
+            enable_vismem=args.enable_vismem,
+        )[0]
         preds.append(pred)
         refs.append(answer)
 

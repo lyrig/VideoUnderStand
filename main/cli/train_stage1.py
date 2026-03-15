@@ -59,12 +59,18 @@ def main():
         for i in pbar:
             batch = collate_samples([ds[i]])
             img = batch["images"][0]
+            video = batch["videos"][0]
             prompt = batch["prompts"][0]
             answer = batch["answers"][0]
             if answer is None:
                 continue
 
-            inputs = processor(text=[prompt], images=[img], return_tensors="pt", padding=True)
+            proc_kwargs = {"text": [prompt], "return_tensors": "pt", "padding": True}
+            if video is not None:
+                proc_kwargs["videos"] = [video]
+            else:
+                proc_kwargs["images"] = [img]
+            inputs = processor(**proc_kwargs)
             inputs = {k:v.to(vismem.device) if hasattr(v, "to") else v for k,v in inputs.items()}
 
             loss_mem, loss_base = stage1_loss(vismem.base_model, vismem, inputs, answer)

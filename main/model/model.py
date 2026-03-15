@@ -172,6 +172,7 @@ class VisMemModel(nn.Module):
     def generate(
         self,
         images: Optional[List[Any]],
+        videos: Optional[List[Any]],
         prompts: List[str],
         max_new_tokens: int = 256,
         temperature: float = 0.0,
@@ -182,7 +183,12 @@ class VisMemModel(nn.Module):
         reverse_mem_type: bool = False,
         ):
         # batch size 1 recommended; we keep batch support
-        inputs = self.processor(text=prompts, images=images, return_tensors="pt", padding=True)
+        proc_kwargs = {"text": prompts, "return_tensors": "pt", "padding": True}
+        if images is not None:
+            proc_kwargs["images"] = images
+        if videos is not None:
+            proc_kwargs["videos"] = videos
+        inputs = self.processor(**proc_kwargs)
         inputs = {k:v.to(self.device) if hasattr(v, "to") else v for k,v in inputs.items()}
 
         # Initial forward
