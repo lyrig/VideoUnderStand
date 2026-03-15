@@ -11,10 +11,10 @@ def _get_model_device_dtype(base_model):
 def _unwrap_feature_tensor(features, feature_name: str) -> torch.Tensor:
     if isinstance(features, torch.Tensor):
         return features
-    if hasattr(features, "last_hidden_state") and isinstance(features.last_hidden_state, torch.Tensor):
-        return features.last_hidden_state
     if hasattr(features, "pooler_output") and isinstance(features.pooler_output, torch.Tensor):
         return features.pooler_output
+    if hasattr(features, "last_hidden_state") and isinstance(features.last_hidden_state, torch.Tensor):
+        return features.last_hidden_state
     if isinstance(features, (tuple, list)) and features and isinstance(features[0], torch.Tensor):
         return features[0]
     raise TypeError(f"{feature_name} must be Tensor-like, got {type(features).__name__}")
