@@ -24,7 +24,12 @@ def main():
     ap.add_argument("--output_dir", required=True)
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--lr", type=float, default=None)
+    ap.add_argument("--cuda_visible_devices", default=None)
     args = ap.parse_args()
+
+    if args.cuda_visible_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_visible_devices
+        logger.info("Using CUDA_VISIBLE_DEVICES=%s", args.cuda_visible_devices)
 
     cfg_dict = load_yaml(args.config)
     if args.model_name_or_path is not None:
