@@ -8,6 +8,18 @@ def _get_model_device_dtype(base_model):
     return emb.weight.device, emb.weight.dtype
 
 
+def _unwrap_feature_tensor(features, feature_name: str) -> torch.Tensor:
+    if isinstance(features, torch.Tensor):
+        return features
+    if hasattr(features, "last_hidden_state") and isinstance(features.last_hidden_state, torch.Tensor):
+        return features.last_hidden_state
+    if hasattr(features, "pooler_output") and isinstance(features.pooler_output, torch.Tensor):
+        return features.pooler_output
+    if isinstance(features, (tuple, list)) and features and isinstance(features[0], torch.Tensor):
+        return features[0]
+    raise TypeError(f"{feature_name} must be Tensor-like, got {type(features).__name__}")
+
+
 def _build_qwen_multimodal_input_embeds(base_model, inputs: Dict[str, Any]) -> torch.Tensor:
     input_ids = inputs["input_ids"]
     device, dtype = _get_model_device_dtype(base_model)
@@ -20,7 +32,10 @@ def _build_qwen_multimodal_input_embeds(base_model, inputs: Dict[str, Any]) -> t
     pixel_values = inputs.get("pixel_values")
     image_grid_thw = inputs.get("image_grid_thw")
     if pixel_values is not None and hasattr(model, "get_image_features"):
-        image_embeds = model.get_image_features(pixel_values.to(device), image_grid_thw)
+        image_embeds = _unwrap_feature_tensor(
+            model.get_image_features(pixel_values.to(device), image_grid_thw),
+            "image features",
+        )
         mask = input_ids.to(device) == base_model.config.image_token_id
         if int(mask.sum().item()) != int(image_embeds.shape[0]):
             raise ValueError(
@@ -33,7 +48,10 @@ def _build_qwen_multimodal_input_embeds(base_model, inputs: Dict[str, Any]) -> t
     pixel_values_videos = inputs.get("pixel_values_videos")
     video_grid_thw = inputs.get("video_grid_thw")
     if pixel_values_videos is not None and hasattr(model, "get_video_features"):
-        video_embeds = model.get_video_features(pixel_values_videos.to(device), video_grid_thw)
+        video_embeds = _unwrap_feature_tensor(
+            model.get_video_features(pixel_values_videos.to(device), video_grid_thw),
+            "video features",
+        )
         mask = input_ids.to(device) == base_model.config.video_token_id
         if int(mask.sum().item()) != int(video_embeds.shape[0]):
             raise ValueError(
