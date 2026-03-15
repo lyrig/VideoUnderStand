@@ -17,6 +17,20 @@ def _require_model_attr(model, attr: str):
     return value
 
 
+def _unwrap_feature_tensor(features, feature_name: str) -> torch.Tensor:
+    if isinstance(features, torch.Tensor):
+        return features
+    if hasattr(features, "last_hidden_state") and isinstance(features.last_hidden_state, torch.Tensor):
+        return features.last_hidden_state
+    if hasattr(features, "pooler_output") and isinstance(features.pooler_output, torch.Tensor):
+        return features.pooler_output
+    if isinstance(features, (tuple, list)) and features and isinstance(features[0], torch.Tensor):
+        return features[0]
+    raise RuntimeError(
+        f"{feature_name} must be a Tensor-compatible output, got {type(features).__name__} instead."
+    )
+
+
 def _build_prompt_inputs_embeds(base_model, inputs: Dict[str, Any]) -> torch.Tensor:
     input_ids = inputs["input_ids"]
     embeds = base_model.get_input_embeddings()(input_ids)
@@ -24,7 +38,10 @@ def _build_prompt_inputs_embeds(base_model, inputs: Dict[str, Any]) -> torch.Ten
     pixel_values = inputs.get("pixel_values")
     if pixel_values is not None:
         get_image_features = _require_model_attr(base_model, "get_image_features")
-        image_embeds = get_image_features(pixel_values, inputs.get("image_grid_thw"))
+        image_embeds = _unwrap_feature_tensor(
+            get_image_features(pixel_values, inputs.get("image_grid_thw")),
+            "image features",
+        )
         image_token_id = base_model.config.image_token_id
         image_mask = input_ids == image_token_id
         n_image_tokens = int(image_mask.sum().item())
@@ -42,7 +59,10 @@ def _build_prompt_inputs_embeds(base_model, inputs: Dict[str, Any]) -> torch.Ten
     pixel_values_videos = inputs.get("pixel_values_videos")
     if pixel_values_videos is not None:
         get_video_features = _require_model_attr(base_model, "get_video_features")
-        video_embeds = get_video_features(pixel_values_videos, inputs.get("video_grid_thw"))
+        video_embeds = _unwrap_feature_tensor(
+            get_video_features(pixel_values_videos, inputs.get("video_grid_thw")),
+            "video features",
+        )
         video_token_id = base_model.config.video_token_id
         video_mask = input_ids == video_token_id
         n_video_tokens = int(video_mask.sum().item())
