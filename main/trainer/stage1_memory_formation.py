@@ -35,7 +35,14 @@ def stage1_loss(base_model, vismem_model, inputs: Dict[str, Any], target_text: s
     inp_embeds = torch.cat([emb, M, tgt_emb], dim=1)
     attn2 = torch.ones(inp_embeds.size()[:-1], device=inp_embeds.device, dtype=torch.long)
 
-    labels2 = torch.cat([inputs["input_ids"], torch.full((inputs["input_ids"].size(0), M.size(1)), -100, device=device, dtype=torch.long), tgt_ids], dim=1)
+    labels2 = torch.cat(
+        [
+            inputs["input_ids"].to(device),
+            torch.full((inputs["input_ids"].size(0), M.size(1)), -100, device=device, dtype=torch.long),
+            tgt_ids.to(device),
+        ],
+        dim=1,
+    ).to(inp_embeds.device)
     labels2[:, :inputs["input_ids"].size(1) + M.size(1)] = -100
 
     out2 = base_model(inputs_embeds=inp_embeds, attention_mask=attn2)
