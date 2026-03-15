@@ -130,13 +130,21 @@ class VisMemModel(nn.Module):
         peft_model = self.peft_model
         set_active_adapter(peft_model, adapter_name)
         B = X.size(0)
+        model_dtype = self.base_model.get_input_embeddings().weight.dtype
 
         if adapter_name == "short_former":
-            m_init = self.m_init_short.expand(B, -1, -1).to(dtype=X.dtype, device=X.device)
+            m_init = self.m_init_short.expand(B, -1, -1).to(dtype=model_dtype, device=X.device)
         else:
-            m_init = self.m_init_long.expand(B, -1, -1).to(dtype=X.dtype, device=X.device)
+            m_init = self.m_init_long.expand(B, -1, -1).to(dtype=model_dtype, device=X.device)
 
-        inp = torch.cat([X, Q, m_init], dim=1)
+        inp = torch.cat(
+            [
+                X.to(dtype=model_dtype),
+                Q.to(dtype=model_dtype),
+                m_init,
+            ],
+            dim=1,
+        )
         attn = torch.ones(B, inp.size(1), device=X.device, dtype=torch.long)
         out = peft_model(inputs_embeds=inp, attention_mask=attn, use_cache=False, output_hidden_states=True) # type: ignore
         hs = out.hidden_states[-1]

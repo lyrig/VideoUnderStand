@@ -39,10 +39,12 @@ class QueryBuilder(nn.Module):
     def forward(self, H: torch.Tensor, H_key_padding_mask: torch.BoolTensor | None = None) -> torch.Tensor:
 
         B, L, D = H.shape
-        q = self.q_init.unsqueeze(0).expand(B, -1, -1)  # (B,K,D)
-        x = torch.cat([H, q], dim=1)  # (B, L+K, D)
-        self._ensure_pos_emb_len(x.size(1), device=H.device, dtype=H.dtype)
-        x = x + self.pos_emb[:, : x.size(1), :]
+        model_dtype = self.q_init.dtype
+        H_for_query = H.to(dtype=model_dtype)
+        q = self.q_init.to(device=H.device).unsqueeze(0).expand(B, -1, -1)  # (B,K,D)
+        x = torch.cat([H_for_query, q], dim=1)  # (B, L+K, D)
+        self._ensure_pos_emb_len(x.size(1), device=H.device, dtype=model_dtype)
+        x = x + self.pos_emb[:, : x.size(1), :].to(device=H.device, dtype=model_dtype)
 
 
         total = L + self.query_len
@@ -55,5 +57,5 @@ class QueryBuilder(nn.Module):
             src_kpm = torch.cat([H_key_padding_mask, q_kpm], dim=1)
         out = self.encoder(x, mask=attn_mask, src_key_padding_mask=src_kpm)
         out = self.ln(out)
-        Q = out[:, -self.query_len:, :]
+        Q = out[:, -self.query_len:, :].to(dtype=H.dtype)
         return Q
