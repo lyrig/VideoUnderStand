@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 @dataclass
@@ -36,18 +35,32 @@ class SimpleGRPOTrainer:
         self.ref_model = ref_model
         self.kl_beta = kl_beta
 
+    def _sequence_logprobs_from_prompt(self, model, prompts_inputs: Dict[str, Any], sampled_ids: torch.LongTensor) -> torch.Tensor:
+        prompt_kwargs = dict(prompts_inputs)
+        out = model(**prompt_kwargs, use_cache=True, output_hidden_states=False)
+        past = out.past_key_values
+        cur_logits = out.logits[:, -1, :]
+        token_logps = []
+
+        for pos in range(sampled_ids.size(1)):
+            token = sampled_ids[:, pos]
+            logp = F.log_softmax(cur_logits, dim=-1).gather(-1, token.unsqueeze(-1)).squeeze(-1)
+            token_logps.append(logp)
+            out = model(
+                input_ids=token.unsqueeze(-1),
+                past_key_values=past,
+                use_cache=True,
+                output_hidden_states=False,
+                attention_mask=None,
+            )
+            past = out.past_key_values
+            cur_logits = out.logits[:, -1, :]
+
+        return torch.stack(token_logps, dim=1).sum(dim=-1)
+
     def loss_from_samples(self, prompts_inputs: Dict[str, Any], sampled_ids: torch.LongTensor, rewards: torch.Tensor) -> torch.Tensor:
-        # Build full input: prompt + sampled
-        input_ids = torch.cat([prompts_inputs["input_ids"], sampled_ids], dim=1)
-        attn = torch.ones_like(input_ids, dtype=torch.long, device=input_ids.device)
-        labels = input_ids.clone()
-        labels[:, :prompts_inputs["input_ids"].size(1)] = -100  # ignore prompt
+        logp = self._sequence_logprobs_from_prompt(self.model.base_model, prompts_inputs, sampled_ids)
 
-        out = self.model.base_model(input_ids=input_ids, attention_mask=attn, output_hidden_states=False)
-        logits = out.logits
-        logp = sequence_logprobs(logits[:, :-1, :], labels[:, 1:])
-
-        # Normalize rewards -> advantages
         adv = rewards - rewards.mean()
         pg_loss = -(adv.detach() * logp).mean()
 
@@ -55,6 +68,6 @@ class SimpleGRPOTrainer:
             return pg_loss
 
         with torch.no_grad():
-            ref_out = self.ref_model(input_ids=input_ids, attention_mask=attn)
-        kl = kl_divergence(logits[:, :-1, :], ref_out.logits[:, :-1, :])
+            ref_logp = self._sequence_logprobs_from_prompt(self.ref_model, prompts_inputs, sampled_ids)
+        kl = logp - ref_logp
         return pg_loss + self.kl_beta * kl.mean()

@@ -17,21 +17,12 @@ from main.trainer.rewards_videor1 import combined_reward
 from main.trainer.stage2_invocation import compute_penalties
 from main.utils.logging import get_logger
 from main.utils.misc import ensure_dir, set_seed, to_torch_dtype
-from main.utils.qwen_vl import load_qwen25vl
+from main.utils.qwen_vl import load_qwen25vl, build_processor_inputs
 
 logger = get_logger("main.train_stage2_videor1")
 
 reward_ema = 0.0
 ema_alpha = 0.05
-
-
-def build_processor_inputs(processor, prompt: str, image, video) -> Dict[str, Any]:
-    proc_kwargs = {"text": [prompt], "return_tensors": "pt", "padding": True}
-    if video is not None:
-        proc_kwargs["videos"] = [video]
-    else:
-        proc_kwargs["images"] = [image]
-    return processor(**proc_kwargs)
 
 
 def main():
@@ -126,9 +117,8 @@ def main():
             if answer is None:
                 continue
 
-            inputs = build_processor_inputs(processor, prompt, img, video)
+            inputs = build_processor_inputs(processor, prompt=prompt, image=img, video=video, add_generation_prompt=True)
             inputs = {k: v.to(vismem.device) if hasattr(v, "to") else v for k, v in inputs.items()}
-            prompt_ids = inputs["input_ids"]
 
             pred_list, _ = vismem.generate(
                 images=[img] if video is None else None,
@@ -181,7 +171,7 @@ def main():
 
             sampled_ids = tokenizer(pred, return_tensors="pt").input_ids.to(vismem.device)
             rewards = torch.tensor([reward_eff], device=vismem.device, dtype=torch.float32)
-            loss = trainer.loss_from_samples({"input_ids": prompt_ids}, sampled_ids, rewards)
+            loss = trainer.loss_from_samples(inputs, sampled_ids, rewards)
 
             opt.zero_grad()
             loss.backward()

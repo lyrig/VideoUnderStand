@@ -8,3 +8,5 @@ tqdm>=4.66.0
 numpy>=1.26
 # Optional but recommended
 peft>=0.12.0
+torchvision==0.21.0
+torchaudio==2.6.0

@@ -10,6 +10,7 @@ from main.model.configuration_vismem import VisMemConfig
 from main.model.query_builder import QueryBuilder
 from main.model.memory_former import TinyMemoryFormer
 from main.model.lora_utils import is_peft_available, make_lora_adapters, set_active_adapter
+from main.utils.qwen_vl import build_processor_inputs
 
 class VisMemModel(nn.Module):
 
@@ -137,7 +138,7 @@ class VisMemModel(nn.Module):
 
         inp = torch.cat([X, Q, m_init], dim=1)
         attn = torch.ones(B, inp.size(1), device=X.device, dtype=torch.long)
-        out = peft_model(inputs_embeds=inp, attention_mask=attn, use_cache=False, output_hidden_states=True)
+        out = peft_model(inputs_embeds=inp, attention_mask=attn, use_cache=False, output_hidden_states=True) # type: ignore
         hs = out.hidden_states[-1]
         M = hs[:, -mem_len:, :]
         return M
@@ -146,9 +147,9 @@ class VisMemModel(nn.Module):
         Q = self.query_builder(H)
         if self.peft_model is None:
             if mem_type == "short":
-                return self.short_former(H, Q)
+                return self.short_former(H, Q) # type: ignore
             else:
-                return self.long_former(H, Q)
+                return self.long_former(H, Q) # type: ignore
         else:
             if mem_type == "short":
                 return self._former_forward_lora(H, Q, self.cfg.short_mem_len, "short_former")
@@ -183,12 +184,17 @@ class VisMemModel(nn.Module):
         reverse_mem_type: bool = False,
         ):
         # batch size 1 recommended; we keep batch support
-        proc_kwargs = {"text": prompts, "return_tensors": "pt", "padding": True}
-        if images is not None:
-            proc_kwargs["images"] = images
-        if videos is not None:
-            proc_kwargs["videos"] = videos
-        inputs = self.processor(**proc_kwargs)
+        if len(prompts) != 1:
+            raise ValueError("Current multimodal generate path supports batch size 1.")
+        image = images[0] if images is not None else None
+        video = videos[0] if videos is not None else None
+        inputs = build_processor_inputs(
+            self.processor,
+            prompt=prompts[0],
+            image=image,
+            video=video,
+            add_generation_prompt=True,
+        )
         inputs = {k:v.to(self.device) if hasattr(v, "to") else v for k,v in inputs.items()}
 
         # Initial forward

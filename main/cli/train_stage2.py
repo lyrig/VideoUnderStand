@@ -7,7 +7,7 @@ import torch.optim as optim
 
 from main.utils.logging import get_logger
 from main.utils.misc import set_seed, to_torch_dtype, ensure_dir
-from main.utils.qwen_vl import load_qwen25vl
+from main.utils.qwen_vl import load_qwen25vl, build_processor_inputs
 from main.model.model import VisMemModel
 from main.data.jsonl_dataset import JsonlVLDataset
 from main.data.collate import collate_samples
@@ -112,14 +112,8 @@ def main():
                 continue
 
             # Prepare prompt inputs
-            proc_kwargs = {"text": [prompt], "return_tensors": "pt", "padding": True}
-            if video is not None:
-                proc_kwargs["videos"] = [video]
-            else:
-                proc_kwargs["images"] = [img]
-            inputs = processor(**proc_kwargs)
+            inputs = build_processor_inputs(processor, prompt=prompt, image=img, video=video, add_generation_prompt=True)
             inputs = {k: v.to(vismem.device) if hasattr(v, "to") else v for k, v in inputs.items()}
-            prompt_ids = inputs["input_ids"]
 
             pred_list, gen_ids = vismem.generate(
                 images=[img] if video is None else None,
@@ -154,7 +148,7 @@ def main():
             sampled_ids = tokenizer(pred, return_tensors="pt").input_ids.to(vismem.device)
             rewards = torch.tensor([r_eff], device=vismem.device, dtype=torch.float32)
 
-            loss = trainer.loss_from_samples({"input_ids": prompt_ids}, sampled_ids, rewards)
+            loss = trainer.loss_from_samples(inputs, sampled_ids, rewards)
 
             opt.zero_grad()
             loss.backward()

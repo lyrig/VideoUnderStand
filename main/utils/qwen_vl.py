@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Tuple, Any, Dict
+from typing import Any, Dict, Optional
 from main.constants import ALL_SPECIAL_TOKENS
 import torch
 
@@ -94,3 +94,51 @@ def load_qwen25vl(model_name_or_path: str, torch_dtype=None, device_map="auto", 
         init_token_embeddings(model, tokenizer, init_from_token=None, noise_std=1e-3)
 
     return model, tokenizer, processor
+
+
+def build_messages(prompt: str, image: Optional[Any] = None, video: Optional[Any] = None, answer: Optional[str] = None):
+    content = []
+    if image is not None:
+        content.append({"type": "image", "image": image})
+    if video is not None:
+        content.append({"type": "video", "video": video})
+    content.append({"type": "text", "text": prompt})
+
+    messages = [{"role": "user", "content": content}]
+    if answer is not None:
+        messages.append({"role": "assistant", "content": [{"type": "text", "text": answer}]})
+    return messages
+
+
+def build_processor_inputs(
+    processor,
+    prompt: str,
+    image: Optional[Any] = None,
+    video: Optional[Any] = None,
+    answer: Optional[str] = None,
+    add_generation_prompt: Optional[bool] = None,
+):
+    try:
+        from qwen_vl_utils import process_vision_info
+    except Exception as exc:
+        raise ImportError(
+            "qwen_vl_utils.process_vision_info is required for Qwen2/2.5-VL multimodal inputs."
+        ) from exc
+
+    if add_generation_prompt is None:
+        add_generation_prompt = answer is None
+
+    messages = build_messages(prompt=prompt, image=image, video=video, answer=answer)
+    text = processor.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=add_generation_prompt,
+    )
+    image_inputs, video_inputs = process_vision_info(messages)
+    return processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )

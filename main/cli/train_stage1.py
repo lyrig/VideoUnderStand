@@ -7,7 +7,7 @@ import torch.optim as optim
 
 from main.utils.logging import get_logger
 from main.utils.misc import set_seed, to_torch_dtype, ensure_dir
-from main.utils.qwen_vl import load_qwen25vl
+from main.utils.qwen_vl import load_qwen25vl, build_processor_inputs
 from main.model.model import VisMemModel
 from main.data.jsonl_dataset import JsonlVLDataset
 from main.data.collate import collate_samples
@@ -65,12 +65,7 @@ def main():
             if answer is None:
                 continue
 
-            proc_kwargs = {"text": [prompt], "return_tensors": "pt", "padding": True}
-            if video is not None:
-                proc_kwargs["videos"] = [video]
-            else:
-                proc_kwargs["images"] = [img]
-            inputs = processor(**proc_kwargs)
+            inputs = build_processor_inputs(processor, prompt=prompt, image=img, video=video, add_generation_prompt=True)
             inputs = {k:v.to(vismem.device) if hasattr(v, "to") else v for k,v in inputs.items()}
 
             loss_mem, loss_base = stage1_loss(vismem.base_model, vismem, inputs, answer)
