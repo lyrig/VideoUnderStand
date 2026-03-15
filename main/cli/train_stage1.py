@@ -46,6 +46,14 @@ def main():
     base_model, tokenizer, processor = load_qwen25vl(model_name, torch_dtype=dtype, device_map=device_map, trust_remote_code=trust)
     vismem = VisMemModel(base_model, tokenizer, processor, viscfg)
 
+    # Save memory during training: disable KV cache and enable gradient checkpointing when available.
+    if hasattr(vismem.base_model.config, "use_cache"):
+        vismem.base_model.config.use_cache = False
+    if hasattr(vismem.base_model, "gradient_checkpointing_enable"):
+        vismem.base_model.gradient_checkpointing_enable()
+    if hasattr(vismem.base_model, "enable_input_require_grads"):
+        vismem.base_model.enable_input_require_grads()
+
     # Freeze base model
     for p in vismem.base_model.parameters():
         p.requires_grad = False
@@ -54,6 +62,7 @@ def main():
     trainable = [p for p in vismem.parameters() if p.requires_grad]
     lr = args.lr if args.lr is not None else float(cfg_dict.get("training", {}).get("lr", 2e-4))
     opt = optim.AdamW(trainable, lr=lr)
+    grad_accum = max(1, int(cfg_dict.get("training", {}).get("grad_accum", 1)))
 
     ds = JsonlVLDataset(args.train_jsonl)
     ensure_dir(args.output_dir)
@@ -61,6 +70,7 @@ def main():
     vismem.train()
     for epoch in range(args.epochs):
         pbar = tqdm(range(len(ds)), desc=f"Stage1 epoch {epoch}")
+        opt.zero_grad(set_to_none=True)
         for i in pbar:
             batch = collate_samples([ds[i]])
             img = batch["images"][0]
@@ -74,10 +84,12 @@ def main():
             inputs = {k:v.to(vismem.device) if hasattr(v, "to") else v for k,v in inputs.items()}
 
             loss_mem, loss_base = stage1_loss(vismem.base_model, vismem, inputs, answer)
-            loss = loss_mem - loss_base.detach()
-            opt.zero_grad()
+            loss = (loss_mem - loss_base.detach()) / grad_accum
             loss.backward()
-            opt.step()
+            should_step = ((i + 1) % grad_accum == 0) or (i == len(ds) - 1)
+            if should_step:
+                opt.step()
+                opt.zero_grad(set_to_none=True)
 
             pbar.set_postfix({"loss_mem": float(loss_mem.detach().cpu()), "loss_base": float(loss_base.detach().cpu())})
 
