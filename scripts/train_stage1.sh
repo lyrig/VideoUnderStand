@@ -1,1 +1,4 @@
-python -m vismem.cli.train_stage1 --train_jsonl path_to_dataset --output_dir outputs/stage1
+python -m main.cli.train_stage1 \
+    --model_name_or_path /mnt/dhwfile/raise/user/panjiabao/huxiaobin/shy/ckpt/model/Qwen2.5-VL-3B-Instruct \
+    --train_jsonl /mnt/dhwfile/raise/user/panjiabao/huxiaobin/shy/data/Video-R1-data/Video-R1-COT-165k.json \
+    --output_dir /mnt/dhwfile/raise/user/panjiabao/huxiaobin/shy/ckpt/VideoUnderStand/stage1

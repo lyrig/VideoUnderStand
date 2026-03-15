@@ -48,18 +48,44 @@ def load_qwen25vl(model_name_or_path: str, torch_dtype=None, device_map="auto", 
         from transformers import AutoModelForVision2Seq as AutoModelClass
     except Exception:
         from transformers import AutoModelForCausalLM as AutoModelClass
+    try:
+        from transformers import Qwen2VLForConditionalGeneration
+    except Exception:
+        Qwen2VLForConditionalGeneration = None
+    try:
+        from transformers import Qwen2_5_VLForConditionalGeneration
+    except Exception:
+        Qwen2_5_VLForConditionalGeneration = None
 
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, trust_remote_code=trust_remote_code)
     processor = AutoProcessor.from_pretrained(model_name_or_path, trust_remote_code=trust_remote_code)
 
     old_vocab = len(tokenizer)
     tokenizer = add_tokens(tokenizer)
-    model = AutoModelClass.from_pretrained(
-        model_name_or_path,
-        trust_remote_code=trust_remote_code,
-        torch_dtype=torch_dtype,
-        device_map=device_map,
-    )
+    model_kwargs = {
+        "trust_remote_code": trust_remote_code,
+        "torch_dtype": torch_dtype,
+        "device_map": device_map,
+    }
+
+    model_name_lower = model_name_or_path.lower()
+    if "qwen2.5-vl" in model_name_lower:
+        if Qwen2_5_VLForConditionalGeneration is None:
+            raise ImportError(
+                "Your transformers installation does not provide Qwen2_5_VLForConditionalGeneration. "
+                "Please install a transformers version that supports Qwen2.5-VL."
+            )
+        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name_or_path, **model_kwargs)
+    elif "qwen2-vl" in model_name_lower:
+        if Qwen2VLForConditionalGeneration is None:
+            raise ImportError(
+                "Your transformers installation does not provide Qwen2VLForConditionalGeneration. "
+                "Please install a transformers version that supports Qwen2-VL."
+            )
+        model = Qwen2VLForConditionalGeneration.from_pretrained(model_name_or_path, **model_kwargs)
+    else:
+        model = AutoModelClass.from_pretrained(model_name_or_path, **model_kwargs)
+
     # resize embeddings after adding tokens
     if hasattr(model, "resize_token_embeddings"):
         model.resize_token_embeddings(len(tokenizer))
