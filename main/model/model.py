@@ -151,7 +151,16 @@ class VisMemModel(nn.Module):
         M = hs[:, -mem_len:, :]
         return M
 
+    def _move_memory_modules(self, device: torch.device) -> None:
+        self.query_builder.to(device)
+        if self.peft_model is None:
+            if self.short_former is not None:
+                self.short_former.to(device)
+            if self.long_former is not None:
+                self.long_former.to(device)
+
     def form_memory(self, H: torch.Tensor, mem_type: str) -> torch.Tensor:
+        self._move_memory_modules(H.device)
         Q = self.query_builder(H)
         if self.peft_model is None:
             if mem_type == "short":

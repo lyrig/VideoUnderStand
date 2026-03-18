@@ -42,7 +42,10 @@ def apply_cuda_visible_devices(cuda_visible_devices: str | None) -> None:
 def enable_memory_saving(vismem: VisMemModel) -> None:
     if hasattr(vismem.base_model.config, "use_cache"):
         vismem.base_model.config.use_cache = False
-    if hasattr(vismem.base_model, "gradient_checkpointing_enable"):
+    # In lora_llm mode we reuse the same base model both for the normal forward
+    # and for adapter-switched memory formation. Checkpoint recomputation can
+    # then observe a different adapter state and fail with metadata mismatch.
+    if vismem.former_backend != "lora_llm" and hasattr(vismem.base_model, "gradient_checkpointing_enable"):
         vismem.base_model.gradient_checkpointing_enable()
     if hasattr(vismem.base_model, "enable_input_require_grads"):
         vismem.base_model.enable_input_require_grads()
