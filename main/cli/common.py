@@ -11,7 +11,10 @@ def load_yaml(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 def build_vismem_config(cfg_dict: Dict[str, Any]) -> VisMemConfig:
-    v = cfg_dict.get("main", {})
+    # Backward-compatible with both the documented `vismem` key and the older `main` key.
+    v = cfg_dict.get("vismem")
+    if v is None:
+        v = cfg_dict.get("main", {})
     qb = v.get("query_builder", {})
     lora = v.get("lora", {})
     cfg = VisMemConfig(

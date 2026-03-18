@@ -34,6 +34,6 @@ training:
   max_new_tokens: 1024
   lr: 2.0e-4
   batch_size: 1
-  grad_accum: 4
+  grad_accum: 1
   # To further reduce memory, also consider lowering vismem.max_prompt_hidden,
   # query_len, short_mem_len, long_mem_len, or switching former_backend to tiny_transformer.

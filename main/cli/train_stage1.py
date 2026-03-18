@@ -2,6 +2,8 @@ from __future__ import annotations
 import argparse
 import os
 from typing import Any, Dict
+import subprocess
+
 
 from tqdm import tqdm
 import torch
@@ -42,7 +44,7 @@ def apply_cuda_visible_devices(cuda_visible_devices: str | None) -> None:
 def enable_memory_saving(vismem: VisMemModel) -> None:
     if hasattr(vismem.base_model.config, "use_cache"):
         vismem.base_model.config.use_cache = False
-    if hasattr(vismem.base_model, "gradient_checkpointing_enable"):
+    if vismem.former_backend != "lora_llm" and hasattr(vismem.base_model, "gradient_checkpointing_enable"):
         vismem.base_model.gradient_checkpointing_enable()
     if hasattr(vismem.base_model, "enable_input_require_grads"):
         vismem.base_model.enable_input_require_grads()
@@ -118,6 +120,7 @@ def main():
         pbar = tqdm(range(len(ds)), desc=f"Stage1 epoch {epoch}")
         opt.zero_grad(set_to_none=True)
         for i in pbar:
+            print(f"Step: {i}")
             batch = collate_samples([ds[i]])
             img = batch["images"][0]
             video = batch["videos"][0]
@@ -138,7 +141,8 @@ def main():
             loss_mem, loss_base = stage1_loss(vismem.base_model, vismem, inputs, answer)
             loss = (loss_mem - loss_base.detach()) / grad_accum
             loss.backward()
-
+            # result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+            # print(result.stdout)
             should_step = ((i + 1) % grad_accum == 0) or (i == len(ds) - 1)
             if should_step:
                 opt.step()
